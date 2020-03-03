@@ -21,6 +21,8 @@ const JAVA_CLASSPATH_RESOURCE = "src/main/resources"
 const DEFAULT_PROFILE = "default"
 
 var fileTypes = []string{"yaml", "yml", "properties"}
+
+// filenames corresponding to the applicationContext's loaded by spring
 var fileNames = []string{"application", "bootstrap"}
 
 func (env *Organizer) RunInitialLoad() {
@@ -43,12 +45,16 @@ func (env *Organizer) RunInitialLoad() {
 		fmt.Printf("Error: %v", err)
 		fmt.Println("")
 	} else {
-		profileProperties := env.consolidateProfileAndContext(runProfile, "application")
-		d, err := yaml.Marshal(&profileProperties)
-		if err != nil {
-			log.Fatalf("error: %v", err)
+		for _, context := range fileNames {
+			profileProperties := env.consolidateProfileAndContext(runProfile, context)
+			d, err := yaml.Marshal(&profileProperties)
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+			fmt.Printf("CONFIGURATION FOR %s", context)
+			fmt.Println("")
+			fmt.Printf("--- t dump:\n%s\n\n", string(d))
 		}
-		fmt.Printf("--- t dump:\n%s\n\n", string(d))
 	}
 }
 
