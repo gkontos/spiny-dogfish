@@ -27,26 +27,29 @@ var fileNames = []string{"application", "bootstrap"}
 
 func (env *Organizer) RunInitialLoad() {
 
+	for _, profile := range uniqueProfiles(env.ConfigFiles) {
+		fmt.Printf("found profile: %v", profile)
+		fmt.Println("")
+	}
+	env.displayCombinedProfile()
+}
+
+func (env *Organizer) LoadConfigFileMetadata() {
 	configClassPathLocation := env.Config.ProjectRoot + "/" + JAVA_CLASSPATH_RESOURCE
 	fmt.Printf("\rScanning %s\r", configClassPathLocation)
 	fmt.Println("")
 	files := make([]model.JavaConfigFileMetadata, 0)
 	configFiles := env.getFiles(configClassPathLocation, files)
 	env.ConfigFiles = configFiles
-	fmt.Printf("Profiles Found: %v", uniqueProfiles(configFiles))
-	fmt.Println("")
+}
 
-	for _, profile := range uniqueProfiles(configFiles) {
-		fmt.Printf("found profile: %v", profile)
-		fmt.Println("")
-	}
-
+func (env *Organizer) displayCombinedProfile() {
 	if runProfile, err := PromptString("Spring Profile (single profile or a comma separated list)"); err != nil {
 		fmt.Printf("Error: %v", err)
 		fmt.Println("")
 	} else {
 		for _, context := range fileNames {
-			profileProperties := env.consolidateProfileAndContext(runProfile, context)
+			profileProperties := env.unionProfileAndContext(runProfile, context)
 			d, err := yaml.Marshal(&profileProperties)
 			if err != nil {
 				log.Fatalf("error: %v", err)
@@ -135,7 +138,7 @@ func uniqueProfiles(files []model.JavaConfigFileMetadata) []string {
 	return uniqueProfiles
 }
 
-func (env *Organizer) consolidateProfileAndContext(profile string, context string) map[string]interface{} {
+func (env *Organizer) unionProfileAndContext(profile string, context string) map[string]interface{} {
 
 	commaRegex := regexp.MustCompile(`,\s+`)
 	profiles := commaRegex.Split(profile, -1)
@@ -145,7 +148,7 @@ func (env *Organizer) consolidateProfileAndContext(profile string, context strin
 	// for each profiles, create a union of the configuration
 	for _, profile := range profiles {
 		if applicationMetadata, err := env.getConfigFileMetaByProfileAndContext(profile, context); err != nil {
-			fmt.Printf("Error loading default profile, %", err)
+			fmt.Printf("Error loading %s profile, %v", profile, err)
 			fmt.Println("")
 		} else {
 			props := loadFromFile(applicationMetadata)
@@ -183,7 +186,7 @@ func (env *Organizer) getConfigFileMetaByProfileAndContext(profile string, conte
 			return file, nil
 		}
 	}
-	return model.JavaConfigFileMetadata{}, fmt.Errorf("error config not found for profile %s and context: %s ", profile, context)
+	return model.JavaConfigFileMetadata{}, fmt.Errorf("config not found for profile %s and context: %s ", profile, context)
 }
 
 func mergeMaps(m1 map[string]interface{}, m2 map[string]interface{}) map[string]interface{} {

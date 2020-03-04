@@ -41,6 +41,8 @@ func main() {
 
 	action, err := getAction()
 
+	organizer.LoadConfigFileMetadata()
+
 	for {
 		if err != nil {
 			fmt.Printf("Error: %v", err)
@@ -48,7 +50,12 @@ func main() {
 		if action == EXIT {
 			break
 		}
-		organizer.RunInitialLoad()
+		if action == VIEW_PROFILE {
+			organizer.RunInitialLoad()
+		}
+		if action == OPTIMIZE_CONFIG {
+			organizer.RunInitialLoad()
+		}
 		action, err = getAction()
 	}
 }
