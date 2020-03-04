@@ -54,7 +54,7 @@ func main() {
 			organizer.RunInitialLoad()
 		}
 		if action == OPTIMIZE_CONFIG {
-			organizer.RunInitialLoad()
+			organizer.BanishProperties()
 		}
 		action, err = getAction()
 	}

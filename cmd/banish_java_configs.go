@@ -1,23 +1,31 @@
 package cmd
 
 import (
-	"container/list"
 	"fmt"
-	"math/rand"
-	"reflect"
 	"strings"
-	"time"
+
+	mapset "github.com/deckarep/golang-set"
+	"github.com/jeremywohl/flatten"
 )
 
 type MatchingKeys struct {
 	profileMatches []string
 	sharedValue    interface{}
-	mapPath        *list.List
 }
 
-type valueCount struct {
-	value interface{}
-	count int
+type ProfileProperties struct {
+	profile        string
+	flatProperties map[string]interface{}
+	keySet         mapset.Set
+	changes        map[string]ChangeSet
+}
+
+type ChangeSet struct {
+	oldValue interface{}
+	newValue interface{}
+	message  string
+	delete   bool
+	profile  string
 }
 
 func (env *Organizer) BanishProperties() {
@@ -27,12 +35,13 @@ func (env *Organizer) BanishProperties() {
 	} else {
 		profiles := strings.Split(strings.ReplaceAll(runProfile, " ", ""), ";")
 		for _, context := range fileNames {
-			env.intersectProfileAndContext(profiles, context)
+			_, changes := env.intersectProfileAndContext(profiles, context)
+			fmt.Printf("%v", changes)
 		}
 	}
 }
 
-func (env *Organizer) intersectProfileAndContext(profiles []string, context string) map[string]interface{} {
+func (env *Organizer) intersectProfileAndContext(profiles []string, context string) ([]ProfileProperties, []ChangeSet) {
 	collectedProfiles := make(map[string]map[string]interface{})
 	profileSlice := make([]map[string]interface{}, 0)
 	for _, profile := range profiles {
@@ -41,142 +50,174 @@ func (env *Organizer) intersectProfileAndContext(profiles []string, context stri
 			profileSlice = append(profileSlice, collectedProfiles[profile])
 		}
 	}
-	intersectingKeys := make([]*list.List, 0)
-	// NOTE: remove the default profile before running..
-	intersectingKeys, _ = mapKeyIntersection(profileSlice, intersectingKeys, list.New())
 
-	propertyMatches := make(map[string][]MatchingKeys)
-	// for the key intersections, determine if there are any duplicate values
-	for _, keyPath := range intersectingKeys {
-		profileValueMap := make(map[string]interface{})
-		for k, v := range collectedProfiles {
-			profileValueMap[k] = getMapValueAtPath(v, keyPath)
-		}
+	flatProfileProperties := getFlatProperties(collectedProfiles)
+	fmt.Printf("flatProfile: %+v", flatProfileProperties)
 
-		values := make([]MatchingKeys, 0)
-		for k, v := range profileValueMap {
-			if k != DEFAULT_PROFILE {
-				if index := valueSliceContains(v, values); index >= 0 {
-					valueCounter := values[index]
-					valueCounter.profileMatches = append(valueCounter.profileMatches, k)
-					values[index] = valueCounter
-				} else {
-					valueCounter := MatchingKeys{}
-					valueCounter.profileMatches = []string{k}
-					valueCounter.sharedValue = v
-					valueCounter.mapPath = keyPath
-				}
-			}
-		}
+	// GET A SET OF ALL THE PROPERTIES WHICH ARE SET IN ALL PROFILES
+	keysetIntersection := getPropertyIntersection(flatProfileProperties, DEFAULT_PROFILE)
 
-		// there is at least one match
-		if len(values) < len(profileSlice) {
-			propertyMatches[RandStringBytesMaskImprSrcSB(25)] = values
-		}
-
-	}
-	handleIntersection(collectedProfiles, propertyMatches)
+	flatProfileProperties, changes := decorateWithChanges(flatProfileProperties, keysetIntersection)
 
 	// for the key intersections, if values match the default profile, they should be removed
+	return flatProfileProperties, changes
 
-	return nil
 }
 
-func valueSliceContains(value interface{}, values []MatchingKeys) int {
-	return -1
+func inSlice(needle string, haystack []string) bool {
+	for _, v := range haystack {
+		if v == needle {
+			return true
+		}
+	}
+	return false
 }
 
-func getMapValueAtPath(haystack map[string]interface{}, keyPath *list.List) interface{} {
-	itStart := keyPath.Front()
-	var found interface{}
-	found = haystack[itStart.Value.(string)]
-	if isMap(found) {
-		for {
-			if el := itStart.Next(); el == nil {
-				break
-			} else {
-				mapValue := found.(map[string]interface{})
-				found = mapValue[el.Value.(string)]
-				if !isMap(found) {
-					break
-				}
+func mostMatches(matches []MatchingKeys) MatchingKeys {
+	max := 0
+	index := 0
+	for i, match := range matches {
+		if len(match.profileMatches) > max {
+			max = len(match.profileMatches)
+			index = i
+		}
+	}
+	return matches[index]
+}
+
+// addToMatchingValuesSlice if there is already a matchingKay with value, add the profile to the exiting match; otherwise add a new match to the slice
+func addToMatchingValuesSlice(value interface{}, profile string, matchingValues []MatchingKeys) []MatchingKeys {
+	for i, match := range matchingValues {
+		if match.sharedValue == value {
+			match.profileMatches = append(match.profileMatches, profile)
+			matchingValues[i] = match
+			return matchingValues
+		}
+	}
+	match := MatchingKeys{}
+	match.profileMatches = []string{profile}
+	match.sharedValue = value
+	return []MatchingKeys{match}
+}
+
+// findSmallestSetProfile will find and return the profile with the smallest set of properties
+func findSmallestSetProfile(profiles []ProfileProperties, exclude string) ProfileProperties {
+	minsize := -1
+	minindex := -1
+	for i, profile := range profiles {
+		if profile.profile != exclude {
+			if minsize == -1 || len(profile.flatProperties) < minsize {
+				minsize = len(profile.flatProperties)
+				minindex = i
 			}
 		}
 	}
-	return found
+	if minindex > -1 {
+		return profiles[minindex]
+	}
+	return ProfileProperties{}
 }
 
-// if a give key exists within all maps in the slice, return the value from all maps; otherwise return empty slice
-func keyExistsInAllMaps(key string, otherMaps []map[string]interface{}) []map[string]interface{} {
+func getFlatProperties(collectedProfiles map[string]map[string]interface{}) []ProfileProperties {
+	profileProperties := make([]ProfileProperties, 0)
+	for k, v := range collectedProfiles {
 
-	return nil
-}
-
-func mapKeyIntersection(maps []map[string]interface{}, keyPaths []*list.List, thisPath *list.List) ([]*list.List, *list.List) {
-	smallestMapSize := 0
-	var smallestMapIndex int
-	baseComparisonMap := make(map[string]interface{})
-	for index, value := range maps {
-		if smallestMapSize == 0 || len(value) < smallestMapSize {
-			smallestMapIndex = index
-			smallestMapSize = len(value)
-		}
-	}
-	baseComparisonMap = maps[smallestMapIndex]
-
-	otherComparisonMaps := make([]map[string]interface{}, 0)
-	for i, v := range maps {
-		if i != smallestMapIndex {
-			otherComparisonMaps = append(otherComparisonMaps, v)
-		}
-	}
-
-	for k := range baseComparisonMap {
-		if checkKey := keyExistsInAllMaps(k, otherComparisonMaps); checkKey != nil {
-			// need something recursive here...?
-			if isMap(baseComparisonMap[k]) {
-				// we want to check the values across all maps and consolidate
-				keyPaths = append(keyPaths, thisPath)
-
-			} else {
-				thisPath.PushBack(k)
-				return mapKeyIntersection(checkKey, keyPaths, thisPath)
-
+		if flatProfile, err := flatten.Flatten(v, "", flatten.DotStyle); err != nil {
+			fmt.Printf("error flatteniing map %v", err)
+		} else {
+			propertyKeys := mapset.NewSet()
+			for key := range flatProfile {
+				propertyKeys.Add(key)
 			}
+			profileProperty := ProfileProperties{}
+			profileProperty.keySet = propertyKeys
+			profileProperty.profile = k
+			profileProperty.flatProperties = flatProfile
+			profileProperties = append(profileProperties, profileProperty)
 		}
+
 	}
-	return keyPaths, nil
+	return profileProperties
 }
 
-func isMap(value interface{}) bool {
-	return (reflect.TypeOf(value).Kind() == reflect.Map)
+func getPropertyIntersection(flatProfileProperties []ProfileProperties, excludeProfile string) mapset.Set {
+	smallestSetProfile := findSmallestSetProfile(flatProfileProperties, DEFAULT_PROFILE)
+	keysetIntersection := smallestSetProfile.keySet
+	fmt.Printf("keyset: %+v", keysetIntersection)
+	for _, v := range flatProfileProperties {
+		fmt.Println("flatProfile: %+v", v)
+		if v.profile != smallestSetProfile.profile && v.profile != excludeProfile {
+			keysetIntersection = keysetIntersection.Intersect(v.keySet)
+		}
+	}
+	return keysetIntersection
 }
 
-const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-const (
-	letterIdxBits = 6                    // 6 bits to represent a letter index
-	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
-	letterIdxMax  = 63 / letterIdxBits
-)
-
-var src = rand.NewSource(time.Now().UnixNano())
-
-// https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go
-func RandStringBytesMaskImprSrcSB(n int) string {
-	sb := strings.Builder{}
-	sb.Grow(n)
-	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
-	for i, cache, remain := n-1, src.Int63(), letterIdxMax; i >= 0; {
-		if remain == 0 {
-			cache, remain = src.Int63(), letterIdxMax
+func decorateWithChanges(flatProfileProperties []ProfileProperties, keysetIntersection mapset.Set) ([]ProfileProperties, []ChangeSet) {
+	changes := make([]ChangeSet, 0)
+	it := keysetIntersection.Iterator()
+	for elem := range it.C {
+		matchingValues := make([]MatchingKeys, 0)
+		for _, profileProperty := range flatProfileProperties {
+			value := profileProperty.flatProperties[elem.(string)]
+			matchingValues = addToMatchingValuesSlice(value, profileProperty.profile, matchingValues)
 		}
-		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
-			sb.WriteByte(letterBytes[idx])
-			i--
+
+		// THE RULES BELOW APPLY B/C we are looking only at properties which intersect across all files
+		if len(matchingValues) < len(flatProfileProperties) {
+			// if all properties are equal ; set the default property to the found value and mark the property for removal from all profiles
+
+			// if some properties are equal; mark the default property for update and mark the property for removal in equivalent profiles
+			matchingValue := mostMatches(matchingValues)
+
+			allFileMessage := fmt.Sprintf("The property %s is equivalent across profiles %s."+
+				"The shared value of %v is being added to the default file.",
+				elem.(string), strings.Join(matchingValue.profileMatches, ","), matchingValue.sharedValue)
+
+			change := ChangeSet{}
+			change.delete = false
+			change.newValue = matchingValues[0].sharedValue
+			change.profile = DEFAULT_PROFILE
+			change.message = allFileMessage
+			flatProfileProperties = setProfilePropertyChange(flatProfileProperties, elem.(string), change, DEFAULT_PROFILE)
+			changes = append(changes, change)
+
+			for _, profile := range matchingValue.profileMatches {
+				change := ChangeSet{}
+				change.delete = true
+				change.oldValue = matchingValues[0].sharedValue
+				change.profile = profile
+				change.message = allFileMessage
+				flatProfileProperties = setProfilePropertyChange(flatProfileProperties, elem.(string), change, profile)
+				changes = append(changes, change)
+			}
+
+		} else {
+			// add a comment to the default propertyfile?  this property is set in all files, but a different value exists in all files.  This might be a mistake?
+			var msg strings.Builder
+			msg.WriteString(fmt.Sprintf("The property %s is set with different values on all profiles", elem.(string)))
+			for _, v := range matchingValues {
+				msg.WriteString(fmt.Sprintf(" {Profile : %s => %v} ", strings.Join(v.profileMatches, ","), v.sharedValue))
+			}
+			change := ChangeSet{}
+			change.message = msg.String()
+			change.delete = false
+			flatProfileProperties = setProfilePropertyChange(flatProfileProperties, elem.(string), change, DEFAULT_PROFILE)
+			changes = append(changes, change)
+
 		}
-		cache >>= letterIdxBits
-		remain--
 	}
+	return flatProfileProperties, changes
+}
 
-	return sb.String()
+func setProfilePropertyChange(flatProfileProperties []ProfileProperties, propertyKey string, change ChangeSet, profile string) []ProfileProperties {
+	for _, profileProperty := range flatProfileProperties {
+		if profileProperty.profile == profile {
+			if profileProperty.changes == nil {
+				profileProperty.changes = make(map[string]ChangeSet)
+			}
+			profileProperty.changes[propertyKey] = change
+		}
+	}
+	return flatProfileProperties
 }
