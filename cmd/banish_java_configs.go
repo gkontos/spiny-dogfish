@@ -52,15 +52,13 @@ func (env *Organizer) BanishProperties() {
 
 func (env *Organizer) intersectProfileAndContext(profiles []string, context string) ([]ProfileProperties, []ChangeSet) {
 	collectedProfiles := make(map[string]map[string]interface{})
-	profileSlice := make([]map[string]interface{}, 0)
+	profiles = append(profiles, DEFAULT_PROFILE)
 	for _, profile := range profiles {
 		collectedProfiles[profile] = env.unionProfileAndContext(profile, context)
-		if profile != DEFAULT_PROFILE {
-			profileSlice = append(profileSlice, collectedProfiles[profile])
-		}
 	}
 
 	profileProperties := getFlatProperties(collectedProfiles)
+	checkDefaultProfile()
 
 	// GET A SET OF ALL THE PROPERTIES WHICH ARE SET IN ALL PROFILES
 	keysetIntersection := getPropertyIntersection(profileProperties, DEFAULT_PROFILE)
@@ -81,7 +79,6 @@ func mostMatches(matches []MatchingKeys) MatchingKeys {
 			index = i
 		}
 	}
-	fmt.Printf("index w/ most matches is %d ", index)
 	return matches[index]
 }
 
@@ -164,8 +161,6 @@ func decorateWithChanges(profileProperties []ProfileProperties, keysetIntersecti
 			if !ok {
 				value = ""
 			}
-			fmt.Printf("adding matching value %v to slice for %s", value, profileProperty.profile)
-			fmt.Println("")
 
 			matchingValues = addToMatchingValuesSlice(value, profileProperty.profile, matchingValues)
 
@@ -187,9 +182,7 @@ func decorateWithChanges(profileProperties []ProfileProperties, keysetIntersecti
 			change.newValue = matchingValues[0].sharedValue
 			change.profile = DEFAULT_PROFILE
 			change.message = allFileMessage
-			fmt.Printf("BEFORE: %+v", profileProperties)
 			profileProperties = setProfilePropertyChange(profileProperties, elem.(string), change, DEFAULT_PROFILE)
-			fmt.Printf("AFTER: %+v", profileProperties)
 			changes = append(changes, change)
 
 			for _, profile := range matchingValue.profileMatches {
@@ -199,7 +192,6 @@ func decorateWithChanges(profileProperties []ProfileProperties, keysetIntersecti
 				change.profile = profile
 				change.message = allFileMessage
 				profileProperties = setProfilePropertyChange(profileProperties, elem.(string), change, profile)
-				fmt.Printf("%s %+v", profile, profileProperties)
 				changes = append(changes, change)
 			}
 
@@ -214,7 +206,6 @@ func decorateWithChanges(profileProperties []ProfileProperties, keysetIntersecti
 			change.message = msg.String()
 			change.delete = false
 			profileProperties = setProfilePropertyChange(profileProperties, elem.(string), change, DEFAULT_PROFILE)
-			fmt.Printf("DEFAULT %+v", profileProperties)
 
 			changes = append(changes, change)
 
@@ -239,21 +230,26 @@ func setProfilePropertyChange(profileProperties []ProfileProperties, propertyKey
 }
 
 func applyChanges(flatProperties map[string]interface{}, changes map[string]ChangeSet) map[string]interface{} {
+	expectedcount := len(flatProperties)
 	for k, v := range changes {
 		if v.delete {
 			delete(flatProperties, k)
-		} else {
-			if v.newValue != nil {
-				flatProperties[k] = v.newValue
+			expectedcount--
+		} else if v.newValue != nil {
+			if _, ok := flatProperties[k]; !ok {
+				// if the element does not already exist in the map, this is a new value which will be added
+				expectedcount++
 			}
+			flatProperties[k] = v.newValue
+
 		}
 	}
+	fmt.Printf("Expected %d, Saw %d", expectedcount, len(flatProperties))
 	return flatProperties
 }
 
 func outputToFiles(profileProperties []ProfileProperties, context string) {
 	for _, properties := range profileProperties {
-		// properties.profile
 		propertiesFileName := fmt.Sprintf("%s-%s-banished.yml", context, properties.profile)
 		changesFileName := fmt.Sprintf("%s-%s-banished-changes.txt", context, properties.profile)
 		expandedProperties := unflatten.Unflatten(properties.flatProperties, func(k string) []string { return strings.Split(k, ".") })
@@ -272,7 +268,7 @@ func outputToFiles(profileProperties []ProfileProperties, context string) {
 
 func outputChanges(changes []ChangeSet, context string) {
 
-	f, _ := os.Create(fmt.Sprintf("change-%s-set.txt", context))
+	f, _ := os.Create(fmt.Sprintf("change-set-%s.txt", context))
 	defer f.Close()
 	for _, line := range changes {
 		_, _ = f.WriteString(line.message + "\n")
@@ -280,4 +276,15 @@ func outputChanges(changes []ChangeSet, context string) {
 
 	f.Sync()
 
+}
+
+func checkDefaultProfile(profileProperties []ProfileProperties) {
+	for _, p := range profileProperties {
+		if p.profile == DEFAULT_PROFILE {
+			if _, ok := p.flatProperties["eureka.instance.lease-expiration-duration-in-seconds"]; ok {
+				fmt.Printf("********************* DEFAULT PROFILE IS GOOD ****************")
+				fmt.Println("")
+			}
+		}
+	}
 }
