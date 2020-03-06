@@ -1,3 +1,5 @@
 vendor/**
-properties-organizer
 *.exe
+*pruned*.yml
+*pruned*.txt
+java-properties-pruner

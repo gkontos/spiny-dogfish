@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/gkontos/properties-organizer/config"
-	"github.com/gkontos/properties-organizer/model"
+	"github.com/gkontos/java-properties-pruner/config"
+	"github.com/gkontos/java-properties-pruner/model"
 )
 
 type Organizer struct {

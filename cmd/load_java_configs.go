@@ -4,14 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"reflect"
 	"regexp"
 	"sort"
 	"strings"
 
-	"github.com/gkontos/properties-organizer/model"
+	log "github.com/gkontos/bivalve-chronicle"
+
+	"github.com/gkontos/java-properties-pruner/model"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
@@ -28,16 +29,14 @@ var fileNames = []string{"application", "bootstrap"}
 func (env *Organizer) RunInitialLoad() {
 
 	for _, profile := range uniqueProfiles(env.ConfigFiles) {
-		fmt.Printf("found profile: %v", profile)
-		fmt.Println("")
+		log.Infof("found profile: %v", profile)
 	}
 	env.displayCombinedProfile()
 }
 
 func (env *Organizer) LoadConfigFileMetadata() {
 	configClassPathLocation := env.Config.ProjectRoot + "/" + JAVA_CLASSPATH_RESOURCE
-	fmt.Printf("\rScanning %s\r", configClassPathLocation)
-	fmt.Println("")
+	log.Infof("Scanning %s", configClassPathLocation)
 	files := make([]model.JavaConfigFileMetadata, 0)
 	configFiles := env.getFiles(configClassPathLocation, files)
 	env.ConfigFiles = configFiles
@@ -45,18 +44,16 @@ func (env *Organizer) LoadConfigFileMetadata() {
 
 func (env *Organizer) displayCombinedProfile() {
 	if runProfile, err := PromptString("Spring Profile (single profile or a comma separated list)"); err != nil {
-		fmt.Printf("Error: %v", err)
-		fmt.Println("")
+		log.Errorf("Error: %v", err)
 	} else {
 		for _, context := range fileNames {
 			profileProperties := env.unionProfileAndContext(runProfile, context)
 			d, err := yaml.Marshal(&profileProperties)
 			if err != nil {
-				log.Fatalf("error: %v", err)
+				panic(fmt.Sprintf("error: %v", err))
 			}
-			fmt.Printf("CONFIGURATION FOR %s", context)
-			fmt.Println("")
-			fmt.Printf("--- t dump:\n%s\n\n", string(d))
+			log.Debugf("CONFIGURATION FOR %s", context)
+			log.Debugf("--- t dump:\n%s\n\n", string(d))
 		}
 	}
 }
@@ -79,16 +76,14 @@ func PromptString(name string) (string, error) {
 func (env *Organizer) getFiles(searchDir string, files []model.JavaConfigFileMetadata) []model.JavaConfigFileMetadata {
 	var fileInfo []os.FileInfo
 	var err error
-	fmt.Printf("Scanning directory %s ", searchDir)
-	fmt.Println("")
+	log.Infof("Scanning directory %s ", searchDir)
 	if fileInfo, err = ioutil.ReadDir(searchDir); err != nil {
-		log.Printf("Unable to read directory at %s: %v", searchDir, err)
+		log.Errorf("Unable to read directory at %s: %v", searchDir, err)
 		return files
 	}
 	for _, file := range fileInfo {
 		if file.IsDir() {
-			fmt.Printf("Directory Found %s ", file.Name())
-			fmt.Println("")
+			log.Infof("Directory Found %s ", file.Name())
 			return env.getFiles(searchDir+"/"+file.Name(), files)
 
 		}
@@ -148,8 +143,8 @@ func (env *Organizer) unionProfileAndContext(profile string, context string) map
 	// for each profiles, create a union of the configuration
 	for _, profile := range profiles {
 		if applicationMetadata, err := env.getConfigFileMetaByProfileAndContext(profile, context); err != nil {
-			fmt.Printf("Error loading %s profile, %v", profile, err)
-			fmt.Println("")
+			log.Errorf("Error loading %s profile, %v", profile, err)
+
 		} else {
 			props := loadFromFile(applicationMetadata)
 			if len(profileProperties) == 0 {
@@ -186,7 +181,7 @@ func (env *Organizer) getConfigFileMetaByProfileAndContext(profile string, conte
 			return file, nil
 		}
 	}
-	return model.JavaConfigFileMetadata{}, fmt.Errorf("config not found for profile %s and context: %s ", profile, context)
+	return model.JavaConfigFileMetadata{}, fmt.Errorf("config not found for profile:%s and context:%s ", profile, context)
 }
 
 func mergeMaps(m1 map[string]interface{}, m2 map[string]interface{}) map[string]interface{} {

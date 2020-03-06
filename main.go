@@ -16,26 +16,30 @@ limitations under the License.
 package main
 
 import (
-	"errors"
 	"fmt"
-	"log"
 	"os"
 
-	"github.com/gkontos/properties-organizer/cmd"
-	"github.com/gkontos/properties-organizer/config"
+	log "github.com/gkontos/bivalve-chronicle"
+	"github.com/gkontos/java-properties-pruner/cmd"
+	"github.com/gkontos/java-properties-pruner/config"
 
 	"github.com/manifoldco/promptui"
 )
 
-const EXIT = "Exit"
-const VIEW_PROFILE = "View Profile Configuration"
-const OPTIMIZE_CONFIG = "Optimize Configuration"
+const (
+	EXIT            = "Exit"
+	VIEW_PROFILE    = "View Profile Configuration"
+	OPTIMIZE_CONFIG = "Optimize Configuration"
+)
 
 var organizer *cmd.Organizer
 
 func main() {
 	v := getConfig()
-	fmt.Printf("getConfig result: %v", v)
+
+	setupLogging()
+	log.Info("Welcome to the Properties Compactor")
+	log.Debugf("getConfig result: %v", v)
 
 	setupApplication(&v.App)
 
@@ -45,7 +49,7 @@ func main() {
 
 	for {
 		if err != nil {
-			fmt.Printf("Error: %v", err)
+			log.Errorf("Error: %v", err)
 		}
 		if action == EXIT {
 			break
@@ -69,32 +73,12 @@ func getAction() (string, error) {
 	_, result, err := prompt.Run()
 
 	if err != nil {
-		fmt.Printf("Prompt failed %v\n", err)
+		log.Errorf("Prompt failed %v\n", err)
 		return "", err
 	}
 
-	fmt.Printf("You choose %q\n", result)
+	log.Infof("You choose %q\n", result)
 	return result, nil
-}
-
-func runLoadFromDir() {
-	val, _ := PromptString("Config Dir")
-	fmt.Printf("You entered %s", val)
-}
-
-func validateEmptyInput(input string) error {
-	if input == "" {
-		return errors.New("Invalid input")
-	}
-	return nil
-}
-
-func PromptString(name string) (string, error) {
-	prompt := promptui.Prompt{
-		Label:    name,
-		Validate: validateEmptyInput,
-	}
-	return prompt.Run()
 }
 
 func getConfig() *config.AppConfig {
@@ -104,23 +88,28 @@ func getConfig() *config.AppConfig {
 	if _, err := os.Stat("./config/config.toml"); err == nil {
 		filename = "./config/config.toml"
 	} else {
-		fmt.Println("No configuration available.  Exiting.")
-		os.Exit(1)
+		panic("No configuration available.  Exiting.")
 	}
 
 	if conf, err := config.LoadAppConfig(filename); err != nil {
-		log.Fatal("Unable to get configuration - ", err)
-		os.Exit(1)
+		panic(fmt.Sprintf("Unable to get configuration - %s", err))
 	} else {
 		return conf
 	}
-	fmt.Print("returning nil")
-	return nil
 }
 
 func setupApplication(appConf *config.Application) {
-	fmt.Printf("in application %+v", appConf)
-	fmt.Println("")
+	log.Debugf("in application %+v", appConf)
 	organizer = &cmd.Organizer{}
 	organizer.Config = appConf
+}
+
+func setupLogging() {
+	logconf := &log.LogConfig{
+		Output:         "stdout",
+		Level:          "info",
+		DisplayMinimal: true,
+		TerminalOutput: true,
+	}
+	log.Configure(logconf)
 }

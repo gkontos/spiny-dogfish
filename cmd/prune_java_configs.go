@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	mapset "github.com/deckarep/golang-set"
+	log "github.com/gkontos/bivalve-chronicle"
 	"github.com/jeremywohl/flatten"
 	"github.com/wolfeidau/unflatten"
 	"gopkg.in/yaml.v2"
@@ -34,16 +35,17 @@ type ChangeSet struct {
 
 func (env *Organizer) BanishProperties() {
 	if runProfile, err := PromptString("Profiles to Consolidate (semi-colon separated list of profiles.  Ie: dev; prod)"); err != nil {
-		fmt.Printf("Error: %v", err)
-		fmt.Println("")
+		log.Errorf("Error: %v", err)
 	} else {
 		profiles := strings.Split(strings.ReplaceAll(runProfile, " ", ""), ";")
 		for _, context := range fileNames {
 			profileProperties, changes := env.intersectProfileAndContext(profiles, context)
-			for _, newProperties := range profileProperties {
-				newProperties.flatProperties = applyChanges(newProperties.flatProperties, newProperties.changes)
 
+			for _, newProperties := range profileProperties {
+				log.Debugf("APPLYING CHANGES TO PROFILE: %s", newProperties.profile)
+				newProperties.flatProperties = applyChanges(newProperties.flatProperties, newProperties.changes)
 			}
+
 			outputToFiles(profileProperties, context)
 			outputChanges(changes, context)
 		}
@@ -58,13 +60,11 @@ func (env *Organizer) intersectProfileAndContext(profiles []string, context stri
 	}
 
 	profileProperties := getFlatProperties(collectedProfiles)
-	checkDefaultProfile()
 
 	// GET A SET OF ALL THE PROPERTIES WHICH ARE SET IN ALL PROFILES
 	keysetIntersection := getPropertyIntersection(profileProperties, DEFAULT_PROFILE)
 
 	profileProperties, changes := decorateWithChanges(profileProperties, keysetIntersection)
-
 	// for the key intersections, if values match the default profile, they should be removed
 	return profileProperties, changes
 
@@ -121,7 +121,7 @@ func getFlatProperties(collectedProfiles map[string]map[string]interface{}) []Pr
 	for k, v := range collectedProfiles {
 
 		if flatProfile, err := flatten.Flatten(v, "", flatten.DotStyle); err != nil {
-			fmt.Printf("error flatteniing map %v", err)
+			log.Errorf("error flatteniing map %v", err)
 		} else {
 			propertyKeys := mapset.NewSet()
 			for key := range flatProfile {
@@ -153,17 +153,18 @@ func decorateWithChanges(profileProperties []ProfileProperties, keysetIntersecti
 	changes := make([]ChangeSet, 0)
 	it := keysetIntersection.Iterator()
 	for elem := range it.C {
-		fmt.Printf("DECORATING FOR KEY %s", elem.(string))
-		fmt.Println("")
+		log.Debugf("DECORATING FOR KEY %s", elem.(string))
+
 		matchingValues := make([]MatchingKeys, 0)
 		for _, profileProperty := range profileProperties {
-			value, ok := profileProperty.flatProperties[elem.(string)]
-			if !ok {
-				value = ""
+			if profileProperty.profile != DEFAULT_PROFILE {
+				value, ok := profileProperty.flatProperties[elem.(string)]
+				if !ok {
+					value = ""
+				}
+
+				matchingValues = addToMatchingValuesSlice(value, profileProperty.profile, matchingValues)
 			}
-
-			matchingValues = addToMatchingValuesSlice(value, profileProperty.profile, matchingValues)
-
 		}
 
 		// THE RULES BELOW APPLY B/C we are looking only at properties which intersect across all files
@@ -230,28 +231,35 @@ func setProfilePropertyChange(profileProperties []ProfileProperties, propertyKey
 }
 
 func applyChanges(flatProperties map[string]interface{}, changes map[string]ChangeSet) map[string]interface{} {
+	log.Debugf("Start count %d", len(flatProperties))
 	expectedcount := len(flatProperties)
+	deletecount := 0
+	addcount := 0
 	for k, v := range changes {
 		if v.delete {
 			delete(flatProperties, k)
 			expectedcount--
+			deletecount++
 		} else if v.newValue != nil {
 			if _, ok := flatProperties[k]; !ok {
 				// if the element does not already exist in the map, this is a new value which will be added
 				expectedcount++
+				addcount++
 			}
 			flatProperties[k] = v.newValue
 
 		}
 	}
-	fmt.Printf("Expected %d, Saw %d", expectedcount, len(flatProperties))
+	log.Debugf("deleted: %d, added: %d", deletecount, addcount)
+	log.Debugf("End count %d", len(flatProperties))
+	log.Debugf("Expected %d, Saw %d", expectedcount, len(flatProperties))
 	return flatProperties
 }
 
 func outputToFiles(profileProperties []ProfileProperties, context string) {
 	for _, properties := range profileProperties {
-		propertiesFileName := fmt.Sprintf("%s-%s-banished.yml", context, properties.profile)
-		changesFileName := fmt.Sprintf("%s-%s-banished-changes.txt", context, properties.profile)
+		propertiesFileName := fmt.Sprintf("%s-%s-pruned.yml", context, properties.profile)
+		changesFileName := fmt.Sprintf("%s-%s-pruned-changes.txt", context, properties.profile)
 		expandedProperties := unflatten.Unflatten(properties.flatProperties, func(k string) []string { return strings.Split(k, ".") })
 		ymlString, _ := yaml.Marshal(expandedProperties)
 		ioutil.WriteFile(propertiesFileName, ymlString, 0644)
@@ -276,15 +284,4 @@ func outputChanges(changes []ChangeSet, context string) {
 
 	f.Sync()
 
-}
-
-func checkDefaultProfile(profileProperties []ProfileProperties) {
-	for _, p := range profileProperties {
-		if p.profile == DEFAULT_PROFILE {
-			if _, ok := p.flatProperties["eureka.instance.lease-expiration-duration-in-seconds"]; ok {
-				fmt.Printf("********************* DEFAULT PROFILE IS GOOD ****************")
-				fmt.Println("")
-			}
-		}
-	}
 }
