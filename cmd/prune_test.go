@@ -7,7 +7,7 @@ import (
 )
 
 func TestAddToMatchingValuesSlice(t *testing.T) {
-	matchingValues := make([]MatchingKeys, 0)
+	matchingValues := make([]matchingKeys, 0)
 	profile := "profile1"
 	value := 4
 	matchingValues = addToMatchingValuesSlice(value, profile, matchingValues)
@@ -38,13 +38,13 @@ func TestAddToMatchingValuesSlice(t *testing.T) {
 }
 
 func TestSetProfilePropertyChange(t *testing.T) {
-	profile := ProfileProperties{}
+	profile := profilePropertyPruner{}
 	profile.profile = "profile1"
-	change := ChangeSet{}
+	change := changeSet{}
 	change.delete = false
 	change.message = "message of change"
 	change.profile = profile.profile
-	profileProperties := []ProfileProperties{profile}
+	profileProperties := []profilePropertyPruner{profile}
 	key := "changed.propery"
 	updatedProperties := setProfilePropertyChange(profileProperties, key, change, profile.profile)
 

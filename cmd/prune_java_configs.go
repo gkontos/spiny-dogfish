@@ -13,19 +13,19 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type MatchingKeys struct {
+type matchingKeys struct {
 	profileMatches []string
 	sharedValue    interface{}
 }
 
-type ProfileProperties struct {
+type profilePropertyPruner struct {
 	profile        string
 	flatProperties map[string]interface{}
 	keySet         mapset.Set
-	changes        map[string]ChangeSet
+	changes        map[string]changeSet
 }
 
-type ChangeSet struct {
+type changeSet struct {
 	oldValue interface{}
 	newValue interface{}
 	message  string
@@ -33,8 +33,9 @@ type ChangeSet struct {
 	profile  string
 }
 
-func (env *Organizer) BanishProperties() {
-	if runProfile, err := PromptString("Profiles to Consolidate (semi-colon separated list of profiles.  Ie: dev; prod)"); err != nil {
+// PruneProperties will load config files, compact duplicate values, and output updated configuration files
+func (env *Organizer) PruneProperties() {
+	if runProfile, err := promptString("Profiles to Consolidate (semi-colon separated list of profiles.  Ie: dev; prod)"); err != nil {
 		log.Errorf("Error: %v", err)
 	} else {
 		profiles := strings.Split(strings.ReplaceAll(runProfile, " ", ""), ";")
@@ -52,9 +53,9 @@ func (env *Organizer) BanishProperties() {
 	}
 }
 
-func (env *Organizer) intersectProfileAndContext(profiles []string, context string) ([]ProfileProperties, []ChangeSet) {
+func (env *Organizer) intersectProfileAndContext(profiles []string, context string) ([]profilePropertyPruner, []changeSet) {
 	collectedProfiles := make(map[string]map[string]interface{})
-	profiles = append(profiles, DEFAULT_PROFILE)
+	profiles = append(profiles, defaultProfileKey)
 	for _, profile := range profiles {
 		collectedProfiles[profile] = env.unionProfileAndContext(profile, context)
 	}
@@ -62,7 +63,7 @@ func (env *Organizer) intersectProfileAndContext(profiles []string, context stri
 	profileProperties := getFlatProperties(collectedProfiles)
 
 	// GET A SET OF ALL THE PROPERTIES WHICH ARE SET IN ALL PROFILES
-	keysetIntersection := getPropertyIntersection(profileProperties, DEFAULT_PROFILE)
+	keysetIntersection := getPropertyIntersection(profileProperties, defaultProfileKey)
 
 	profileProperties, changes := decorateWithChanges(profileProperties, keysetIntersection)
 	// for the key intersections, if values match the default profile, they should be removed
@@ -70,7 +71,7 @@ func (env *Organizer) intersectProfileAndContext(profiles []string, context stri
 
 }
 
-func mostMatches(matches []MatchingKeys) MatchingKeys {
+func mostMatches(matches []matchingKeys) matchingKeys {
 	max := 0
 	index := 0
 	for i, match := range matches {
@@ -83,7 +84,7 @@ func mostMatches(matches []MatchingKeys) MatchingKeys {
 }
 
 // addToMatchingValuesSlice if there is already a matchingKay with value, add the profile to the exiting match; otherwise add a new match to the slice
-func addToMatchingValuesSlice(value interface{}, profile string, matchingValues []MatchingKeys) []MatchingKeys {
+func addToMatchingValuesSlice(value interface{}, profile string, matchingValues []matchingKeys) []matchingKeys {
 	for i, match := range matchingValues {
 		if match.sharedValue == value {
 			match.profileMatches = append(match.profileMatches, profile)
@@ -91,7 +92,7 @@ func addToMatchingValuesSlice(value interface{}, profile string, matchingValues 
 			return matchingValues
 		}
 	}
-	match := MatchingKeys{}
+	match := matchingKeys{}
 	match.profileMatches = []string{profile}
 	match.sharedValue = value
 	matchingValues = append(matchingValues, match)
@@ -99,7 +100,7 @@ func addToMatchingValuesSlice(value interface{}, profile string, matchingValues 
 }
 
 // findSmallestSetProfile will find and return the profile with the smallest set of properties
-func findSmallestSetProfile(profiles []ProfileProperties, exclude string) ProfileProperties {
+func findSmallestSetProfile(profiles []profilePropertyPruner, exclude string) profilePropertyPruner {
 	minsize := -1
 	minindex := -1
 	for i, profile := range profiles {
@@ -113,11 +114,11 @@ func findSmallestSetProfile(profiles []ProfileProperties, exclude string) Profil
 	if minindex > -1 {
 		return profiles[minindex]
 	}
-	return ProfileProperties{}
+	return profilePropertyPruner{}
 }
 
-func getFlatProperties(collectedProfiles map[string]map[string]interface{}) []ProfileProperties {
-	profileProperties := make([]ProfileProperties, 0)
+func getFlatProperties(collectedProfiles map[string]map[string]interface{}) []profilePropertyPruner {
+	profileProperties := make([]profilePropertyPruner, 0)
 	for k, v := range collectedProfiles {
 
 		if flatProfile, err := flatten.Flatten(v, "", flatten.DotStyle); err != nil {
@@ -127,7 +128,7 @@ func getFlatProperties(collectedProfiles map[string]map[string]interface{}) []Pr
 			for key := range flatProfile {
 				propertyKeys.Add(key)
 			}
-			profileProperty := ProfileProperties{}
+			profileProperty := profilePropertyPruner{}
 			profileProperty.keySet = propertyKeys
 			profileProperty.profile = k
 			profileProperty.flatProperties = flatProfile
@@ -138,8 +139,8 @@ func getFlatProperties(collectedProfiles map[string]map[string]interface{}) []Pr
 	return profileProperties
 }
 
-func getPropertyIntersection(flatProfileProperties []ProfileProperties, excludeProfile string) mapset.Set {
-	smallestSetProfile := findSmallestSetProfile(flatProfileProperties, DEFAULT_PROFILE)
+func getPropertyIntersection(flatProfileProperties []profilePropertyPruner, excludeProfile string) mapset.Set {
+	smallestSetProfile := findSmallestSetProfile(flatProfileProperties, defaultProfileKey)
 	keysetIntersection := smallestSetProfile.keySet
 	for _, v := range flatProfileProperties {
 		if v.profile != smallestSetProfile.profile && v.profile != excludeProfile {
@@ -149,15 +150,15 @@ func getPropertyIntersection(flatProfileProperties []ProfileProperties, excludeP
 	return keysetIntersection
 }
 
-func decorateWithChanges(profileProperties []ProfileProperties, keysetIntersection mapset.Set) ([]ProfileProperties, []ChangeSet) {
-	changes := make([]ChangeSet, 0)
+func decorateWithChanges(profileProperties []profilePropertyPruner, keysetIntersection mapset.Set) ([]profilePropertyPruner, []changeSet) {
+	changes := make([]changeSet, 0)
 	it := keysetIntersection.Iterator()
 	for elem := range it.C {
 		log.Debugf("DECORATING FOR KEY %s", elem.(string))
 
-		matchingValues := make([]MatchingKeys, 0)
+		matchingValues := make([]matchingKeys, 0)
 		for _, profileProperty := range profileProperties {
-			if profileProperty.profile != DEFAULT_PROFILE {
+			if profileProperty.profile != defaultProfileKey {
 				value, ok := profileProperty.flatProperties[elem.(string)]
 				if !ok {
 					value = ""
@@ -178,16 +179,16 @@ func decorateWithChanges(profileProperties []ProfileProperties, keysetIntersecti
 				"The shared value of %v is being added to the default file.",
 				elem.(string), strings.Join(matchingValue.profileMatches, ","), matchingValue.sharedValue)
 
-			change := ChangeSet{}
+			change := changeSet{}
 			change.delete = false
 			change.newValue = matchingValues[0].sharedValue
-			change.profile = DEFAULT_PROFILE
+			change.profile = defaultProfileKey
 			change.message = allFileMessage
-			profileProperties = setProfilePropertyChange(profileProperties, elem.(string), change, DEFAULT_PROFILE)
+			profileProperties = setProfilePropertyChange(profileProperties, elem.(string), change, defaultProfileKey)
 			changes = append(changes, change)
 
 			for _, profile := range matchingValue.profileMatches {
-				change := ChangeSet{}
+				change := changeSet{}
 				change.delete = true
 				change.oldValue = matchingValues[0].sharedValue
 				change.profile = profile
@@ -203,10 +204,10 @@ func decorateWithChanges(profileProperties []ProfileProperties, keysetIntersecti
 			for _, v := range matchingValues {
 				msg.WriteString(fmt.Sprintf(" {Profile : %s => %v} ", strings.Join(v.profileMatches, ","), v.sharedValue))
 			}
-			change := ChangeSet{}
+			change := changeSet{}
 			change.message = msg.String()
 			change.delete = false
-			profileProperties = setProfilePropertyChange(profileProperties, elem.(string), change, DEFAULT_PROFILE)
+			profileProperties = setProfilePropertyChange(profileProperties, elem.(string), change, defaultProfileKey)
 
 			changes = append(changes, change)
 
@@ -215,12 +216,12 @@ func decorateWithChanges(profileProperties []ProfileProperties, keysetIntersecti
 	return profileProperties, changes
 }
 
-func setProfilePropertyChange(profileProperties []ProfileProperties, propertyKey string, change ChangeSet, profile string) []ProfileProperties {
+func setProfilePropertyChange(profileProperties []profilePropertyPruner, propertyKey string, change changeSet, profile string) []profilePropertyPruner {
 	updatedProperties := profileProperties[:0]
 	for _, profileProperty := range profileProperties {
 		if profileProperty.profile == profile {
 			if profileProperty.changes == nil {
-				profileProperty.changes = make(map[string]ChangeSet)
+				profileProperty.changes = make(map[string]changeSet)
 			}
 			profileProperty.changes[propertyKey] = change
 
@@ -230,7 +231,7 @@ func setProfilePropertyChange(profileProperties []ProfileProperties, propertyKey
 	return updatedProperties
 }
 
-func applyChanges(flatProperties map[string]interface{}, changes map[string]ChangeSet) map[string]interface{} {
+func applyChanges(flatProperties map[string]interface{}, changes map[string]changeSet) map[string]interface{} {
 	log.Debugf("Start count %d", len(flatProperties))
 	expectedcount := len(flatProperties)
 	deletecount := 0
@@ -256,7 +257,7 @@ func applyChanges(flatProperties map[string]interface{}, changes map[string]Chan
 	return flatProperties
 }
 
-func outputToFiles(profileProperties []ProfileProperties, context string) {
+func outputToFiles(profileProperties []profilePropertyPruner, context string) {
 	for _, properties := range profileProperties {
 		propertiesFileName := fmt.Sprintf("%s-%s-pruned.yml", context, properties.profile)
 		changesFileName := fmt.Sprintf("%s-%s-pruned-changes.txt", context, properties.profile)
@@ -274,7 +275,7 @@ func outputToFiles(profileProperties []ProfileProperties, context string) {
 	}
 }
 
-func outputChanges(changes []ChangeSet, context string) {
+func outputChanges(changes []changeSet, context string) {
 
 	f, _ := os.Create(fmt.Sprintf("change-set-%s.txt", context))
 	defer f.Close()

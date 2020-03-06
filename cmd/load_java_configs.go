@@ -13,19 +13,21 @@ import (
 	log "github.com/gkontos/bivalve-chronicle"
 
 	"github.com/gkontos/java-properties-pruner/model"
-	"github.com/manifoldco/promptui"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
 )
 
-const JAVA_CLASSPATH_RESOURCE = "src/main/resources"
-const DEFAULT_PROFILE = "default"
+const (
+	javaClasspathResourcePath = "src/main/resources"
+	defaultProfileKey         = "default"
+)
 
 var fileTypes = []string{"yaml", "yml", "properties"}
 
 // filenames corresponding to the applicationContext's loaded by spring
 var fileNames = []string{"application", "bootstrap"}
 
+// RunInitialLoad will pull in configurations from the configured locations
 func (env *Organizer) RunInitialLoad() {
 
 	for _, profile := range uniqueProfiles(env.ConfigFiles) {
@@ -34,8 +36,9 @@ func (env *Organizer) RunInitialLoad() {
 	env.displayCombinedProfile()
 }
 
+// LoadConfigFileMetadata will load the file metadata for configs
 func (env *Organizer) LoadConfigFileMetadata() {
-	configClassPathLocation := env.Config.ProjectRoot + "/" + JAVA_CLASSPATH_RESOURCE
+	configClassPathLocation := env.Config.ProjectRoot + "/" + javaClasspathResourcePath
 	log.Infof("Scanning %s", configClassPathLocation)
 	files := make([]model.JavaConfigFileMetadata, 0)
 	configFiles := env.getFiles(configClassPathLocation, files)
@@ -43,7 +46,7 @@ func (env *Organizer) LoadConfigFileMetadata() {
 }
 
 func (env *Organizer) displayCombinedProfile() {
-	if runProfile, err := PromptString("Spring Profile (single profile or a comma separated list)"); err != nil {
+	if runProfile, err := promptString("Spring Profile (single profile or a comma separated list)"); err != nil {
 		log.Errorf("Error: %v", err)
 	} else {
 		for _, context := range fileNames {
@@ -63,14 +66,6 @@ func validateEmptyInput(input string) error {
 		return errors.New("Invalid input")
 	}
 	return nil
-}
-
-func PromptString(name string) (string, error) {
-	prompt := promptui.Prompt{
-		Label:    name,
-		Validate: validateEmptyInput,
-	}
-	return prompt.Run()
 }
 
 func (env *Organizer) getFiles(searchDir string, files []model.JavaConfigFileMetadata) []model.JavaConfigFileMetadata {
@@ -98,7 +93,7 @@ func (env *Organizer) getFiles(searchDir string, files []model.JavaConfigFileMet
 					if len(fileNameParts) > 1 {
 						configFile.Profile = fileNameParts[len(fileNameParts)-1]
 					} else {
-						configFile.Profile = DEFAULT_PROFILE
+						configFile.Profile = defaultProfileKey
 					}
 					configFile.ApplicationContext = fileNameParts[0]
 
@@ -111,6 +106,7 @@ func (env *Organizer) getFiles(searchDir string, files []model.JavaConfigFileMet
 	return files
 }
 
+// Find will return the index of an item within a slice if it exists.  If the element is not in the slice, Find will return -1
 func Find(slice []string, val string) (int, bool) {
 	for i, item := range slice {
 		if item == val {
@@ -137,7 +133,7 @@ func (env *Organizer) unionProfileAndContext(profile string, context string) map
 
 	commaRegex := regexp.MustCompile(`,\s+`)
 	profiles := commaRegex.Split(profile, -1)
-	profiles = append([]string{DEFAULT_PROFILE}, profiles...)
+	profiles = append([]string{defaultProfileKey}, profiles...)
 
 	profileProperties := make(map[string]interface{})
 	// for each profiles, create a union of the configuration

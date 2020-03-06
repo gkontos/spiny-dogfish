@@ -27,9 +27,9 @@ import (
 )
 
 const (
-	EXIT            = "Exit"
-	VIEW_PROFILE    = "View Profile Configuration"
-	OPTIMIZE_CONFIG = "Optimize Configuration"
+	exitAction           = "Exit"
+	viewProfileAction    = "View Profile Configuration"
+	optimizeConfigAction = "Optimize Configuration"
 )
 
 var organizer *cmd.Organizer
@@ -51,14 +51,14 @@ func main() {
 		if err != nil {
 			log.Errorf("Error: %v", err)
 		}
-		if action == EXIT {
+		if action == exitAction {
 			break
 		}
-		if action == VIEW_PROFILE {
+		if action == viewProfileAction {
 			organizer.RunInitialLoad()
 		}
-		if action == OPTIMIZE_CONFIG {
-			organizer.BanishProperties()
+		if action == optimizeConfigAction {
+			organizer.PruneProperties()
 		}
 		action, err = getAction()
 	}
@@ -67,7 +67,7 @@ func main() {
 func getAction() (string, error) {
 	prompt := promptui.Select{
 		Label: "Select Action",
-		Items: []string{EXIT, VIEW_PROFILE, OPTIMIZE_CONFIG},
+		Items: []string{exitAction, viewProfileAction, optimizeConfigAction},
 	}
 
 	_, result, err := prompt.Run()
