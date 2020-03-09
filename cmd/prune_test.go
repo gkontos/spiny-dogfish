@@ -59,3 +59,9 @@ func TestSetProfilePropertyChange(t *testing.T) {
 	assert.EqualValues(t, 1, len(updatedProfile.changes))
 
 }
+
+func TestUnionProfileAndContext(t *testing.T) {
+	profile := "dev"
+	context := "application"
+
+}

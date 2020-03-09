@@ -1,18 +1,3 @@
-/*
-Copyright © 2020 NAME HERE <EMAIL ADDRESS>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package main
 
 import (
@@ -22,6 +7,7 @@ import (
 	log "github.com/gkontos/bivalve-chronicle"
 	"github.com/gkontos/java-properties-pruner/cmd"
 	"github.com/gkontos/java-properties-pruner/config"
+	"github.com/gkontos/java-properties-pruner/model"
 
 	"github.com/manifoldco/promptui"
 )
@@ -32,7 +18,7 @@ const (
 	optimizeConfigAction = "Optimize Configuration"
 )
 
-var organizer *cmd.Organizer
+var organizer *cmd.Pruner
 
 func main() {
 	v := getConfig()
@@ -44,6 +30,8 @@ func main() {
 	setupApplication(&v.App)
 
 	action, err := getAction()
+
+	organizer.ConfigFiles = make(map[int8][]model.JavaConfigFileMetadata)
 
 	organizer.LoadConfigFileMetadata()
 
@@ -85,8 +73,8 @@ func getConfig() *config.AppConfig {
 
 	var filename string
 
-	if _, err := os.Stat("./config/config.toml"); err == nil {
-		filename = "./config/config.toml"
+	if _, err := os.Stat("config.toml"); err == nil {
+		filename = "config.toml"
 	} else {
 		panic("No configuration available.  Exiting.")
 	}
@@ -100,14 +88,14 @@ func getConfig() *config.AppConfig {
 
 func setupApplication(appConf *config.Application) {
 	log.Debugf("in application %+v", appConf)
-	organizer = &cmd.Organizer{}
+	organizer = &cmd.Pruner{}
 	organizer.Config = appConf
 }
 
 func setupLogging() {
 	logconf := &log.LogConfig{
 		Output:         "stdout",
-		Level:          "info",
+		Level:          "debug",
 		DisplayMinimal: true,
 		TerminalOutput: true,
 	}

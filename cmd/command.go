@@ -6,11 +6,17 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
-// Organizer is the application context; this seems to be used somewhat eradically
-type Organizer struct {
-	Config      *config.Application
-	ConfigFiles []model.JavaConfigFileMetadata
+// Pruner is the application context; this seems to be used somewhat eradically
+type Pruner struct {
+	Config *config.Application
+	// config files are either classpath or default
+	ConfigFiles map[int8][]model.JavaConfigFileMetadata
 }
+
+const (
+	classpathFileKey = 0
+	externalFileKey  = 1
+)
 
 func promptString(name string) (string, error) {
 	prompt := promptui.Prompt{

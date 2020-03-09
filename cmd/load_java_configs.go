@@ -28,35 +28,40 @@ var fileTypes = []string{"yaml", "yml", "properties"}
 var fileNames = []string{"application", "bootstrap"}
 
 // RunInitialLoad will pull in configurations from the configured locations
-func (env *Organizer) RunInitialLoad() {
+func (appCtx *Pruner) RunInitialLoad() {
 
-	for _, profile := range uniqueProfiles(env.ConfigFiles) {
+	for _, profile := range uniqueProfiles(appCtx.ConfigFiles) {
 		log.Infof("found profile: %v", profile)
 	}
-	env.displayCombinedProfile()
+	appCtx.displayCombinedProfile()
 }
 
 // LoadConfigFileMetadata will load the file metadata for configs
-func (env *Organizer) LoadConfigFileMetadata() {
-	configClassPathLocation := env.Config.ProjectRoot + "/" + javaClasspathResourcePath
+func (appCtx *Pruner) LoadConfigFileMetadata() {
+	configClassPathLocation := appCtx.Config.ProjectRoot + "/" + javaClasspathResourcePath
 	log.Infof("Scanning %s", configClassPathLocation)
 	files := make([]model.JavaConfigFileMetadata, 0)
-	configFiles := env.getFiles(configClassPathLocation, files)
-	env.ConfigFiles = configFiles
+	configFiles := appCtx.getFiles(configClassPathLocation, files)
+	appCtx.ConfigFiles[classpathFileKey] = configFiles
+
+	log.Infof("Scanning %s", appCtx.Config.ExternalConfiguration)
+	files = make([]model.JavaConfigFileMetadata, 0)
+	configFiles = appCtx.getFiles(appCtx.Config.ExternalConfiguration, files)
+	appCtx.ConfigFiles[externalFileKey] = configFiles
 }
 
-func (env *Organizer) displayCombinedProfile() {
+func (appCtx *Pruner) displayCombinedProfile() {
 	if runProfile, err := promptString("Spring Profile (single profile or a comma separated list)"); err != nil {
 		log.Errorf("Error: %v", err)
 	} else {
 		for _, context := range fileNames {
-			profileProperties := env.unionProfileAndContext(runProfile, context)
+			profileProperties := appCtx.unionProfileAndContext(runProfile, context)
 			d, err := yaml.Marshal(&profileProperties)
 			if err != nil {
 				panic(fmt.Sprintf("error: %v", err))
 			}
-			log.Debugf("CONFIGURATION FOR %s", context)
-			log.Debugf("--- t dump:\n%s\n\n", string(d))
+			log.Infof("CONFIGURATION FOR %s", context)
+			log.Infof("--- t dump:\n%s\n\n", string(d))
 		}
 	}
 }
@@ -68,7 +73,8 @@ func validateEmptyInput(input string) error {
 	return nil
 }
 
-func (env *Organizer) getFiles(searchDir string, files []model.JavaConfigFileMetadata) []model.JavaConfigFileMetadata {
+// getFiles will recursively crawl the search directory and return a list of the configuration files at that location
+func (appCtx *Pruner) getFiles(searchDir string, files []model.JavaConfigFileMetadata) []model.JavaConfigFileMetadata {
 	var fileInfo []os.FileInfo
 	var err error
 	log.Infof("Scanning directory %s ", searchDir)
@@ -79,7 +85,7 @@ func (env *Organizer) getFiles(searchDir string, files []model.JavaConfigFileMet
 	for _, file := range fileInfo {
 		if file.IsDir() {
 			log.Infof("Directory Found %s ", file.Name())
-			return env.getFiles(searchDir+"/"+file.Name(), files)
+			return appCtx.getFiles(searchDir+"/"+file.Name(), files)
 
 		}
 		parts := strings.Split(file.Name(), ".")
@@ -116,11 +122,14 @@ func Find(slice []string, val string) (int, bool) {
 	return -1, false
 }
 
-func uniqueProfiles(files []model.JavaConfigFileMetadata) []string {
+func uniqueProfiles(files map[int8][]model.JavaConfigFileMetadata) []string {
 	uniqueProfiles := make([]string, 0)
 	profileMap := make(map[string]bool)
-	for _, configFile := range files {
-		profileMap[configFile.Profile] = true
+	for _, v := range files {
+
+		for _, configFile := range v {
+			profileMap[configFile.Profile] = true
+		}
 	}
 	for key := range profileMap {
 		uniqueProfiles = append(uniqueProfiles, key)
@@ -129,7 +138,7 @@ func uniqueProfiles(files []model.JavaConfigFileMetadata) []string {
 	return uniqueProfiles
 }
 
-func (env *Organizer) unionProfileAndContext(profile string, context string) map[string]interface{} {
+func (appCtx *Pruner) unionProfileAndContext(profile string, context string) map[string]interface{} {
 
 	commaRegex := regexp.MustCompile(`,\s+`)
 	profiles := commaRegex.Split(profile, -1)
@@ -138,15 +147,31 @@ func (env *Organizer) unionProfileAndContext(profile string, context string) map
 	profileProperties := make(map[string]interface{})
 	// for each profiles, create a union of the configuration
 	for _, profile := range profiles {
-		if applicationMetadata, err := env.getConfigFileMetaByProfileAndContext(profile, context); err != nil {
+		if applicationMetadata, err := appCtx.getConfigFileMetaByProfileAndContext(profile, context); err != nil {
 			log.Errorf("Error loading %s profile, %v", profile, err)
 
 		} else {
-			props := loadFromFile(applicationMetadata)
-			if len(profileProperties) == 0 {
-				profileProperties = props
-			} else {
-				profileProperties = mergeMaps(profileProperties, props)
+			// To store the keys in slice in sorted order
+			var keys []int
+			for k := range applicationMetadata {
+				keys = append(keys, int(k))
+			}
+			sort.Ints(keys)
+			log.Debugf("keys:%+v", keys)
+
+			// To perform the opertion you want
+			// THINK ABOUT THIS.  ESP the order.  this is doing default classpath, default external, profile classpath, profile external
+			props := make(map[string]interface{}, 0)
+			for _, k := range keys {
+				log.Debugf("merging key:%d", k)
+				log.Debugf("%+v", applicationMetadata[int8(k)])
+				props = loadFromFile(applicationMetadata[int8(k)])
+				log.Debugf("props : %+v", props)
+				if len(profileProperties) == 0 {
+					profileProperties = props
+				} else {
+					profileProperties = mergeMaps(profileProperties, props)
+				}
 			}
 		}
 	}
@@ -160,26 +185,37 @@ func loadFromFile(fileMetadata model.JavaConfigFileMetadata) map[string]interfac
 	configName := strings.Split(pathParts[len(pathParts)-1], ".")[0]
 	pathParts = pathParts[:len(pathParts)-1]
 	path := strings.Join(pathParts, "/")
-	viper.SetConfigName(configName)                     // name of config file (without extension)
-	viper.SetConfigType(fileMetadata.ConfigurationType) // REQUIRED if the config file does not have the extension in the name
-	viper.AddConfigPath(path)                           // path to look for the config file in
-	err := viper.ReadInConfig()                         // Find and read the config file
-	if err != nil {                                     // Handle errors reading the config file
+	v := viper.New()
+	v.SetConfigName(configName)                     // name of config file (without extension)
+	v.SetConfigType(fileMetadata.ConfigurationType) // REQUIRED if the config file does not have the extension in the name
+	v.AddConfigPath(path)                           // path to look for the config file in
+	err := v.ReadInConfig()                         // Find and read the config file
+	if err != nil {                                 // Handle errors reading the config file
 		panic(fmt.Errorf("fatal error config file: %s ", err))
 	}
-	return viper.AllSettings()
+	return v.AllSettings()
 }
 
-func (env *Organizer) getConfigFileMetaByProfileAndContext(profile string, context string) (model.JavaConfigFileMetadata, error) {
+func (appCtx *Pruner) getConfigFileMetaByProfileAndContext(profile string, context string) (map[int8]model.JavaConfigFileMetadata, error) {
+	profileConfigFiles := make(map[int8]model.JavaConfigFileMetadata)
+	for loadOrder, fileList := range appCtx.ConfigFiles {
+		log.Debugf("load order :%d, files : %+v", loadOrder, fileList)
+		for _, file := range fileList {
 
-	for _, file := range env.ConfigFiles {
-		if file.ApplicationContext == context && file.Profile == profile {
-			return file, nil
+			if file.ApplicationContext == context && file.Profile == profile {
+				profileConfigFiles[loadOrder] = file
+			}
+
 		}
 	}
-	return model.JavaConfigFileMetadata{}, fmt.Errorf("config not found for profile:%s and context:%s ", profile, context)
+	if len(profileConfigFiles) > 0 {
+		log.Debugf("configFiles : %+v", profileConfigFiles)
+		return profileConfigFiles, nil
+	}
+	return nil, fmt.Errorf("config not found for profile:%s and context:%s ", profile, context)
 }
 
+// mergeMaps will merge map m2 onto map m1
 func mergeMaps(m1 map[string]interface{}, m2 map[string]interface{}) map[string]interface{} {
 	m3 := make(map[string]interface{})
 	for k, v := range m1 {

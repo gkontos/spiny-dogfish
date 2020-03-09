@@ -34,7 +34,7 @@ type changeSet struct {
 }
 
 // PruneProperties will load config files, compact duplicate values, and output updated configuration files
-func (env *Organizer) PruneProperties() {
+func (env *Pruner) PruneProperties() {
 	if runProfile, err := promptString("Profiles to Consolidate (semi-colon separated list of profiles.  Ie: dev; prod)"); err != nil {
 		log.Errorf("Error: %v", err)
 	} else {
@@ -53,7 +53,7 @@ func (env *Organizer) PruneProperties() {
 	}
 }
 
-func (env *Organizer) intersectProfileAndContext(profiles []string, context string) ([]profilePropertyPruner, []changeSet) {
+func (env *Pruner) intersectProfileAndContext(profiles []string, context string) ([]profilePropertyPruner, []changeSet) {
 	collectedProfiles := make(map[string]map[string]interface{})
 	profiles = append(profiles, defaultProfileKey)
 	for _, profile := range profiles {
