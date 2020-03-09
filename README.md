@@ -1,9 +1,9 @@
-# Spiky Dogfish 
+# Mud Shark 
 
-Spiky Dogfish is a Java Spring Properties Pruner.  Spiky Dogfish will reduce the clutter of Java Spring properties files making the actual configuration for your environment more apparent.  
+Mud Shark is a Java Spring Properties Pruner.  Mud Shark will reduce the clutter of Java Spring properties files making the actual configuration for your environment more apparent.  
 This will also make it easier to make changes to a configuration without unintended side effects.
 
-Spiky Dogfish will look at files on your application's classpath as well as properties within an external configuration directory.  
+Mud Shark will look at files on your application's classpath as well as properties within an external configuration directory.  
 The directories to be scanned are specified in the config.toml file in the same working directory as the executable.
 
 Configuration files will be pruned to respect the load order of configuration files from Spring Boot.  
@@ -19,5 +19,5 @@ https://docs.spring.io/spring-boot/docs/current/reference/html/spring-boot-featu
 
 1. Application properties packaged inside your jar (application.properties and YAML variants).
 
-Spiky Dogfish will load either yaml or java properties files.  The application will output yaml files as well as a changeset.
+Mud Shark will load either yaml or java properties files.  The application will output yaml files as well as a changeset.
 
