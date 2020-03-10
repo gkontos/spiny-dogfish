@@ -2,4 +2,4 @@ vendor/**
 *.exe
 *pruned*.yml
 *pruned*.txt
-java-properties-pruner
+spiny-dogfish
