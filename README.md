@@ -20,7 +20,7 @@ For easy reference, the following order will be used by the pruner with the firs
 Spiny Dogfish will load either yaml or java properties files.  The application will output yaml files as well as a changeset.
 
 ## Running The App
-1. Download the appropriate binary for your platform.  The binaries can be found under the releases tab of github.
+1. Download the appropriate binary for your platform.  The binaries can be [found under the releases tab of github](https://github.com/gkontos/spiny-dogfish/releases).
 2. Create a file called 'config.toml' in the same directory as the binary file.  Set the root directory for the project.  See the config.toml file in the repo for an example file.  The value for 'project_root' must be set.  external_properties does not need to be set, but it should be blank if it will not be used.  Windows users should use forward slashes rather than backslashes, ie c:/my-dev-directory/project 
 3. Run the application using ./<spiny-dogfish-executable> or <spiny-dogfish-executable>.exe 
 
