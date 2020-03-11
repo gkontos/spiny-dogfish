@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/gkontos/bivalve-chronicle"
+	log "github.com/gkontos/bivalve-chronicles"
 
-	"github.com/gkontos/java-properties-pruner/model"
+	"github.com/gkontos/spiny-dogfish/model"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
 )

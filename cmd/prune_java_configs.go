@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	mapset "github.com/deckarep/golang-set"
-	log "github.com/gkontos/bivalve-chronicle"
+	log "github.com/gkontos/bivalve-chronicles"
 	"github.com/jeremywohl/flatten"
 	"github.com/wolfeidau/unflatten"
 	"gopkg.in/yaml.v2"

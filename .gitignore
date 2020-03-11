@@ -2,4 +2,5 @@ vendor/**
 *.exe
 *pruned*.yml
 *pruned*.txt
-spiny-dogfish
+spiny-dogfish*
+change-set*

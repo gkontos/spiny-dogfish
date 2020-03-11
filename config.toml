@@ -1,6 +1,6 @@
 [app]
 # spring application root directory.  The application will look at src/main/resources for configuration files
-project_root = "<project-root-directory>"
+project_root = "E:/dev/uaa-server-ui"
 
 # directory that holds external configuration files
-external_properties = "external-property-directory"
+external_properties = ""

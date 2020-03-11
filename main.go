@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	log "github.com/gkontos/bivalve-chronicle"
-	"github.com/gkontos/java-properties-pruner/cmd"
-	"github.com/gkontos/java-properties-pruner/config"
-	"github.com/gkontos/java-properties-pruner/model"
+	log "github.com/gkontos/bivalve-chronicles"
+	"github.com/gkontos/spiny-dogfish/cmd"
+	"github.com/gkontos/spiny-dogfish/config"
+	"github.com/gkontos/spiny-dogfish/model"
 
 	"github.com/manifoldco/promptui"
 )
@@ -95,7 +95,7 @@ func setupApplication(appConf *config.Application) {
 func setupLogging() {
 	logconf := &log.LogConfig{
 		Output:         "stdout",
-		Level:          "debug",
+		Level:          "info",
 		DisplayMinimal: true,
 		TerminalOutput: true,
 	}

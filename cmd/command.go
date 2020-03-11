@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/gkontos/java-properties-pruner/config"
-	"github.com/gkontos/java-properties-pruner/model"
+	"github.com/gkontos/spiny-dogfish/config"
+	"github.com/gkontos/spiny-dogfish/model"
 	"github.com/manifoldco/promptui"
 )
 
