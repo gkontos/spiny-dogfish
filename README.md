@@ -19,6 +19,11 @@ For easy reference, the following order will be used by the pruner with the firs
 
 Spiny Dogfish will load either yaml or java properties files.  The application will output yaml files as well as a changeset.
 
+## Running The App
+1. Download the appropriate binary for your platform.  The binaries can be found under the releases tab of github.
+2. Create a file called 'config.toml' in the same directory as the binary file.  Set the root directory for the project.  See the config.toml file in the repo for an example file.
+3. Run the application using ./spiny-dogfish or spiny-dogfish.exe 
+
 ## Known Issues
 
 * Properties with camelcase keys will not be properly imported or exported.  This may result in duplicate key values and when the key name is exported it may not match the key used within your application for the property
